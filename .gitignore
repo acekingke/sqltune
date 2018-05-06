@@ -1,0 +1,8 @@
+.idea/
+
+*.pkg
+
+*.txt
+
+logs/
+
