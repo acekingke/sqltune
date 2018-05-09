@@ -116,7 +116,8 @@ func TestInSubquery(t *testing.T){
 		t.Error(err)
 	}
 	Optimizer(stmt)
-
+	fmt.Println("------------------")
+	fmt.Println(sqlparser.String(stmt))
 }
 func TestOnVal(t *testing.T)  {
 	sql := "select 1 from t2 "

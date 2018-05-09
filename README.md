@@ -32,6 +32,13 @@ select * from t where a = (2) / 2
 ```
 ## TODO 
 
+- [x] rewrite the compare expression 
+- [x] in subquery to exist subquery
+- [ ] add the schema
+- [ ] add sample from database , see "数据库抽样“
+- [ ] sugguession how to create index
+
+
 
 ## License
 

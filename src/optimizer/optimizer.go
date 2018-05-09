@@ -14,6 +14,31 @@ func Optimizer(stmt sqlparser.Statement)  {
 func newOptimizer(stmt sqlparser.Statement) *optimizer {
 	return &optimizer{stmt:stmt};
 }
+func fetchColNamefromAliasExpr(node sqlparser.SQLNode)(colname *sqlparser.ColName){
+
+	sqlparser.Walk(func(alias_node sqlparser.SQLNode) (kontinue bool, err error) {
+
+		switch alias_node:= alias_node.(type) {
+		case *sqlparser.ColName:
+			colname = alias_node
+			return false,nil
+		}
+		return true,nil
+	}, node)
+	return colname;
+}
+func fetchTableName(node sqlparser.SQLNode)(tabname *sqlparser.TableName)  {
+	sqlparser.Walk(func(table_node sqlparser.SQLNode) (kontinue bool, err error) {
+
+		switch table_node:= table_node.(type) {
+		case sqlparser.TableName:
+			tabname = &table_node
+			return false,nil
+		}
+		return true,nil
+	}, node)
+	return tabname
+}
 func (opt *optimizer)WalkStatement(node sqlparser.SQLNode) (bool, error)  {
 	switch node := node.(type) {
 	case *sqlparser.Select:
@@ -26,50 +51,51 @@ func (opt *optimizer)WalkStatement(node sqlparser.SQLNode) (bool, error)  {
 		// TODO 改写in语句为exists语句
 		if len(node.From) == 1 {
 			if tabexpr, ok:= (node.From[0]).(*sqlparser.AliasedTableExpr);ok{
-				log.Println(tabexpr)
+
 				if simpleTbaleExpr,ok:=tabexpr.Expr.(sqlparser.SimpleTableExpr); ok{
 					if tableName,ok := simpleTbaleExpr.(sqlparser.TableName); ok{
-						log.Println(tableName.Name)
-						sqlparser.Walk(func(node_one sqlparser.SQLNode) (kontinue bool, err error) {
-							switch node_one:=node_one.(type){
-							case *sqlparser.ComparisonExpr:
-								if  node_left, yes := node_one.Left.(*sqlparser.ColName);yes &&node_one.Operator == sqlparser.InStr {
-									if subquery, ok := node_one.Right.(*sqlparser.Subquery); ok {
-										log.Println("in expresion has subquery")
-										AliasExpr := sqlparser.AliasedExpr{Expr: sqlparser.NewIntVal([]byte("1")), As: sqlparser.ColIdent{}}
-										//TODO subquery.Select
-										if subselect, ok:=subquery.Select.(*sqlparser.Select); ok{
-											// TODO 从子查询中读取列
-											subselect.SelectExprs = sqlparser.SelectExprs{&AliasExpr}
-											node_left.Qualifier = tableName
-											/*subselect.AddWhere()
-											exist_expr:=sqlparser.ExistsExpr{subquery}*/
+
+						sqlparser.Walk(func(node_ sqlparser.SQLNode) (kontinue bool, err error) {
+							switch node_one_expr:=node_.(type){
+							case sqlparser.Expr:
+								if node_one,ok:=node_one_expr.(*sqlparser.ComparisonExpr); ok {
+									if  node_left, yes := node_one.Left.(*sqlparser.ColName);yes &&node_one.Operator == sqlparser.InStr {
+										if subquery, ok := node_one.Right.(*sqlparser.Subquery); ok {
+
+											AliasExpr := sqlparser.AliasedExpr{Expr: sqlparser.NewIntVal([]byte("1")), As: sqlparser.ColIdent{}}
+											// subquery.Select
+											if subselect, ok:=subquery.Select.(*sqlparser.Select); ok{
+												//  从子查询中读取列
+												col_name := fetchColNamefromAliasExpr(subselect.SelectExprs[0]);
+
+												subquery_tablename := fetchTableName(subselect.From[0])
+												col_name.Qualifier = *subquery_tablename
+
+												subselect.SelectExprs = sqlparser.SelectExprs{&AliasExpr}
+												node_left.Qualifier = tableName
+												compareExpr := sqlparser.ComparisonExpr{Operator:sqlparser.EqualStr, Left:node_left,Right:col_name}
+												subselect.AddWhere(&compareExpr)
+												node_one_expr = &sqlparser.ExistsExpr{Subquery:subquery}
+												if (node_one == node.Where.Expr){
+													node.Where = sqlparser.NewWhere(sqlparser.WhereStr, node_one_expr)
+												}
+
+
+											}
+
+											return false, nil
 										}
-										log.Println("here", AliasExpr)
 									}
 								}
+
 							}
 							return true, nil
 						}, node);
+						log.Println(node)
 					}
 				}
 
 			}
-
-			sqlparser.Walk(func(node_one sqlparser.SQLNode) (kontinue bool, err error) {
-				switch node_one:=node_one.(type){
-				case *sqlparser.ComparisonExpr:
-					if  _, yes := node_one.Left.(*sqlparser.ColName);yes &&node_one.Operator == sqlparser.InStr {
-						if _, ok := node_one.Right.(*sqlparser.Subquery); ok {
-							log.Println("in expresion has subquery")
-							AliasExpr := sqlparser.AliasedExpr{Expr: sqlparser.NewIntVal([]byte("1")), As: sqlparser.ColIdent{}}
-
-							log.Println("here", AliasExpr)
-						}
-					}
-				}
-				return true, nil
-			}, node);
 		}
 
 		_ = sqlparser.Walk(opt.WalkOpt, node)
